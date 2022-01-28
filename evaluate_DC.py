@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
+from utils import train
 use_gpu = torch.cuda.is_available()
 
 
@@ -42,7 +43,7 @@ if __name__ == '__main__':
     # ---- Base class statistics
     base_means = []
     base_cov = []
-    base_features_path = "./checkpoints/%s/WideResNet28_10_S2M2_R/last/base_features.plk"%dataset
+    base_features_path = "./checkpoints/%s/WideResNet28_10_S2M2_R/last/base_features.plk"%
     with open(base_features_path, 'rb') as f:
         data = pickle.load(f)
         for key in data.keys():
@@ -55,7 +56,8 @@ if __name__ == '__main__':
     # ---- classification for each task
     acc_list = []
     print('Start classification for %d tasks...'%(n_runs))
-    for i in tqdm(range(n_runs)):
+    runner = tqdm(range(n_runs))
+    for i in runner:
 
         support_data = ndatas[i][:n_lsamples].numpy()
         support_label = labels[i][:n_lsamples].numpy()
@@ -77,10 +79,13 @@ if __name__ == '__main__':
         X_aug = np.concatenate([support_data, sampled_data])
         Y_aug = np.concatenate([support_label, sampled_label])
         # ---- train classifier
-        classifier = LogisticRegression(max_iter=1000).fit(X=X_aug, y=Y_aug)
+        X_aug, Y_aug, query_data, query_label = torch.from_numpy(X_aug).float(), torch.from_numpy(Y_aug), torch.from_numpy(query_data).float(), torch.from_numpy(query_label)
+        X_aug, Y_aug, query_data, query_label = X_aug.cuda(), Y_aug.cuda(), query_data.cuda(), query_label.cuda()
+        acc = train(X_aug, Y_aug, query_data, query_label)
 
-        predicts = classifier.predict(query_data)
-        acc = np.mean(predicts == query_label)
-        acc_list.append(acc)
+        #predicts = classifier.predict(query_data)
+        #acc = np.mean(predicts == query_label)
+        acc_list.append(acc.detach().cpu().numpy())
+        runner.set_description("Acc %s" % np.mean(acc_list).item())
     print('%s %d way %d shot  ACC : %f'%(dataset,n_ways,n_shot,float(np.mean(acc_list))))
 
